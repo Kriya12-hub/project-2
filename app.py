@@ -162,9 +162,11 @@ elif section == "Long-Term Wealth":
 
     st.write("### Who Should Invest?")
     st.write(
-        "- Long-term investors focused on business quality\n"
-        "- Not ideal for speculative short-term trading\n"
-        Note: Always align with your personal risk profile."
+    "- Long-term investors focused on business quality\n"
+    "- Not ideal for speculative short-term trading\n"
+    "- Always align with your personal risk profile."
+)
+
     )
 
 # ---------- FOOTER ----------
