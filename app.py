@@ -160,12 +160,13 @@ elif section == "Long-Term Wealth":
     st.write("### Investment Horizon Recommendation")
     st.write(valuation_view)
 
-    st.write("### Who Should Invest?")
-    st.write(
-    "- Long-term investors focused on business quality\n"
-    "- Not ideal for speculative short-term trading\n"
-    "- Always align with your personal risk profile."
-)
+   st.markdown("""
+**Who should invest?**
+- Long-term investors focused on business quality  
+- Not ideal for speculative short-term trading  
+- Always align with your personal risk profile
+""")
+
 
     )
 
