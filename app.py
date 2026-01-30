@@ -3,27 +3,26 @@ import yfinance as yf
 import pandas as pd
 import numpy as np
 
+# ================== CONFIG ==================
 st.set_page_config(page_title="ALPHA STACK", layout="wide")
 
-# ---------- SIDEBAR ----------
+# ================== SIDEBAR ==================
 st.sidebar.title("ALPHA STACK")
+
 section = st.sidebar.radio(
     "Navigation",
     [
-        "Market Overview",
         "Buy / Sell Decision",
-        "Deep Analysis",
         "Fundamentals Decoder",
         "Financial Health (Beginner)",
-        "Sentiment & News Intelligence",
-        "Confidence Score",
         "Portfolio Risk Checker",
-        "Compare Two Stocks",
-        "Long-Term Wealth"
     ]
 )
 
-# ---------- HEADER ----------
+st.sidebar.markdown("---")
+st.sidebar.caption("Built for clarity, not hype")
+
+# ================== HEADER ==================
 st.title("Turn Data into Conviction.")
 st.caption("Markets explained. Decisions simplified.")
 
@@ -32,6 +31,7 @@ symbol = st.text_input("Enter Stock Symbol (.NS for India)", "RELIANCE.NS")
 if not symbol:
     st.stop()
 
+# ================== DATA ==================
 stock = yf.Ticker(symbol)
 data = stock.history(period="1y")
 
@@ -46,135 +46,163 @@ price = data["Close"].iloc[-1]
 prev = data["Close"].iloc[-2]
 change_pct = ((price - prev) / prev) * 100
 
-# ---------- HELPERS ----------
-def market_cap_simple(val):
+# ================== HELPERS ==================
+def cr(val):
     if not val:
         return "N/A"
     return f"₹{val/1e7:,.0f} Cr"
 
-daily_returns = data["Close"].pct_change().dropna()
-volatility = daily_returns.std() * 100
-
 ma50 = data["Close"].rolling(50).mean().iloc[-1]
 ma200 = data["Close"].rolling(200).mean().iloc[-1]
 
-# ---------- CONFIDENCE SCORE ----------
-score = 0
+returns = data["Close"].pct_change().dropna()
+volatility = returns.std() * 100
 
-# Trend
-if price > ma50 > ma200:
-    score += 25
-elif price > ma50:
-    score += 15
+# =========================================================
+# 1️⃣ BUY / SELL DECISION (CORE)
+# =========================================================
+if section == "Buy / Sell Decision":
+    st.subheader("📌 What should YOU do right now?")
 
-# Volatility
-if volatility < 1.2:
-    score += 20
-elif volatility < 2.5:
-    score += 10
+    col1, col2, col3 = st.columns(3)
 
-# Valuation
-pe = info.get("trailingPE")
-if pe and pe < 20:
-    score += 20
-elif pe:
-    score += 10
+    col1.metric("Current Price", f"{currency}{price:.2f}", f"{change_pct:.2f}%")
+    col2.metric("50-Day Avg", f"{currency}{ma50:.2f}")
+    col3.metric("200-Day Avg", f"{currency}{ma200:.2f}")
 
-# Profitability
-margin = info.get("profitMargins")
-if margin and margin > 0.15:
-    score += 20
-elif margin:
-    score += 10
+    st.markdown("### 🔍 Decision Zones (Rule-Based)")
 
-# Cash flow
-cfo = info.get("operatingCashflow")
-if cfo and cfo > 0:
-    score += 15
+    if price > ma50 > ma200:
+        st.success(
+            f"""
+**Trend:** Strong  
+**Action:** Long-term investors may buy **only on dips near {currency}{ma50:.2f}**  
+**Sell if:** Price closes below {currency}{ma200:.2f}  
+"""
+        )
+    elif price < ma200:
+        st.error(
+            f"""
+**Trend:** Weak  
+**Action:** Avoid or exit  
+**Reason:** Stock is below long-term support ({currency}{ma200:.2f})
+"""
+        )
+    else:
+        st.warning(
+            f"""
+**Trend:** Neutral  
+**Action:** Wait  
+**Reason:** Better risk-reward may appear near {currency}{ma50:.2f}
+"""
+        )
 
-# ======================================================
-if section == "Market Overview":
-    st.metric("Price", f"{currency}{price:.2f}", f"{change_pct:.2f}%")
-    st.write(f"**Confidence Score:** {score}/100")
-    st.line_chart(data["Close"])
-    st.write(info.get("longBusinessSummary", ""))
+    st.markdown("""
+**Important for beginners:**  
+Never invest all money at one price.  
+Good stocks also give bad entries.
+""")
 
-# ======================================================
-elif section == "Buy / Sell Decision":
-    st.subheader("Action Zones (Not Predictions)")
-    st.write(f"Buy Zone: near {currency}{ma50:.2f}")
-    st.write(f"Sell / Risk Zone: below {currency}{ma200:.2f}")
-
-# ======================================================
-elif section == "Deep Analysis":
-    st.line_chart(data["Close"])
-    rolling = data["Close"].pct_change(30) * 100
-    st.line_chart(rolling)
-
-# ======================================================
+# =========================================================
+# 2️⃣ FUNDAMENTALS DECODER (ALL KEY INDICATORS)
+# =========================================================
 elif section == "Fundamentals Decoder":
-    st.table(pd.DataFrame({
-        "Metric": ["Market Cap", "P/E", "ROE", "Debt to Equity"],
-        "Value": [
-            market_cap_simple(info.get("marketCap")),
-            pe,
-            info.get("returnOnEquity"),
-            info.get("debtToEquity")
-        ]
-    }))
+    st.subheader("📊 Fundamentals — Explained Clearly")
 
-# ======================================================
+    fundamentals = {
+        "Market Cap": cr(info.get("marketCap")),
+        "P/E Ratio": info.get("trailingPE"),
+        "P/B Ratio": info.get("priceToBook"),
+        "ROE": info.get("returnOnEquity"),
+        "ROCE": info.get("returnOnAssets"),
+        "Debt": cr(info.get("totalDebt")),
+        "Debt to Equity": info.get("debtToEquity"),
+        "Revenue Growth": info.get("revenueGrowth"),
+        "Profit Margin": info.get("profitMargins"),
+        "Dividend Yield": info.get("dividendYield"),
+    }
+
+    df = pd.DataFrame(
+        fundamentals.items(),
+        columns=["Indicator", "Value"]
+    )
+
+    st.table(df)
+
+    st.markdown("### 🧠 How to read this")
+
+    if info.get("debtToEquity", 0) < 1:
+        st.success("Debt is under control.")
+    else:
+        st.warning("Debt is high. Watch carefully.")
+
+    if info.get("returnOnEquity", 0) and info.get("returnOnEquity") > 0.15:
+        st.success("Business generates healthy returns on capital.")
+    else:
+        st.warning("Returns on capital are average or weak.")
+
+# =========================================================
+# 3️⃣ FINANCIAL HEALTH (BEGINNER-FRIENDLY)
+# =========================================================
 elif section == "Financial Health (Beginner)":
-    st.write("Cash Flow:", "Positive" if cfo and cfo > 0 else "Negative")
-    st.write("Profit Margins:", "Healthy" if margin and margin > 0.15 else "Weak")
+    st.subheader("🩺 Financial Health — Simple Language")
 
-# ======================================================
-elif section == "Sentiment & News Intelligence":
-    for n in stock.news[:5]:
-        st.markdown(f"**[{n['title']}]({n['link']})**")
-        st.caption(n.get("publisher", ""))
+    cfo = info.get("operatingCashflow")
+    profit_margin = info.get("profitMargins")
 
-# ======================================================
-elif section == "Confidence Score":
-    st.metric("Alpha Stack Confidence Score", f"{score}/100")
-    if score >= 80:
-        st.success("Strong candidate for disciplined investors.")
-    elif score >= 60:
-        st.warning("Decent stock, timing matters.")
+    st.markdown("### Cash Flow Check")
+
+    if cfo and cfo > 0:
+        st.success("Company generates real cash from operations.")
     else:
-        st.error("High risk for beginners.")
+        st.error("Company struggles to generate cash.")
 
-# ======================================================
+    st.markdown("### Profit Quality")
+
+    if profit_margin and profit_margin > 0.15:
+        st.success("Healthy profits. Business has pricing power.")
+    else:
+        st.warning("Thin profits. Business is under pressure.")
+
+    st.markdown("### Beginner Verdict")
+
+    if cfo and cfo > 0 and profit_margin and profit_margin > 0.15:
+        st.success("Financially strong for long-term investors.")
+    else:
+        st.warning("Not financially ideal for beginners.")
+
+# =========================================================
+# 4️⃣ PORTFOLIO RISK CHECKER
+# =========================================================
 elif section == "Portfolio Risk Checker":
-    amount = st.number_input("Investment Amount (₹)", 10000)
-    stocks = st.number_input("No. of stocks in portfolio", 1)
-    risk = st.selectbox("Risk Appetite", ["Low", "Medium", "High"])
+    st.subheader("⚠️ Portfolio Risk Reality Check")
 
-    if stocks < 5 and risk == "Low":
-        st.error("High concentration risk for low-risk investor.")
+    amount = st.number_input("Investment Amount (₹)", 50000)
+    stocks = st.slider("Number of stocks in your portfolio", 1, 20, 5)
+    risk = st.selectbox("Your Risk Appetite", ["Low", "Medium", "High"])
+
+    st.markdown("### Risk Diagnosis")
+
+    if stocks < 5:
+        st.error("High concentration risk. One bad stock can hurt badly.")
     else:
-        st.info("Portfolio risk seems aligned.")
+        st.success("Diversification is reasonable.")
 
-# ======================================================
-elif section == "Compare Two Stocks":
-    sym2 = st.text_input("Second Stock Symbol", "TCS.NS")
-    s2 = yf.Ticker(sym2)
-    d2 = s2.history(period="1y")
-
-    if not d2.empty:
-        st.write("### Comparison")
-        st.table(pd.DataFrame({
-            "Metric": ["Price", "Volatility"],
-            symbol: [price, volatility],
-            sym2: [d2["Close"].iloc[-1], d2["Close"].pct_change().std()*100]
-        }))
-
-# ======================================================
-elif section == "Long-Term Wealth":
-    if score >= 70:
-        st.success("Suitable for long-term holding with patience.")
+    if volatility > 2.5 and risk == "Low":
+        st.error("Stock volatility does NOT match your risk appetite.")
+    elif volatility < 1.5 and risk == "High":
+        st.warning("You may be under-utilizing your risk capacity.")
     else:
-        st.warning("Wait or invest cautiously.")
+        st.success("Risk profile is aligned.")
 
+    st.markdown("""
+**Truth:**  
+Most losses come from poor risk control, not bad stocks.
+""")
+
+# ================== FOOTER ==================
 st.markdown("---")
-st.caption("Made by Kriya Chhajed")
+st.markdown(
+    "<marquee>Investing is about managing risk, not predicting prices • Made by Kriya</marquee>",
+    unsafe_allow_html=True
+)
