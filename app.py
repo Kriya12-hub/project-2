@@ -4,10 +4,7 @@ import pandas as pd
 import numpy as np
 
 # ================== PAGE CONFIG ==================
-st.set_page_config(
-    page_title="ALPHA STACK",
-    layout="wide"
-)
+st.set_page_config(page_title="ALPHA STACK", layout="wide")
 
 # ================== HEADER ==================
 st.markdown("""
@@ -18,29 +15,27 @@ st.markdown("""
     align-items:center;
 }
 .logo {
+    font-size:32px;
     font-weight:800;
-    font-size:28px;
 }
-.tagline {
+.subtitle {
     font-size:14px;
     color:gray;
 }
-.marquee {
-    font-size:14px;
-    color:#0a66c2;
+.section {
+    margin-top:30px;
 }
 </style>
 
 <div class="header">
     <div>
-        <div class="logo">ALPHA STACK</div>
-        <div class="tagline">Market Intelligence Engine</div>
+        <div class="logo">🟢 ALPHA STACK</div>
+        <div class="subtitle">Market Intelligence • Not Predictions</div>
     </div>
-    <div>📊</div>
 </div>
 
-<marquee class="marquee">
-Investing is about managing risk, not predicting prices • Built by Kriya
+<marquee>
+Built for disciplined investors • Data over emotion • Made by Kriya
 </marquee>
 """, unsafe_allow_html=True)
 
@@ -53,21 +48,18 @@ section = st.sidebar.radio(
     "",
     [
         "Market Overview",
-        "Buy / Sell Decision",
         "Deep Analysis",
         "Fundamentals Decoder",
         "Financial Health (Beginner)",
-        "Portfolio Risk Checker",
+        "Buy / Sell Decision",
+        "News & Sentiment Analysis"
     ]
 )
 
 st.sidebar.caption("Built for clarity, not hype")
 
 # ================== INPUT ==================
-symbol = st.text_input(
-    "Enter Stock Symbol (.NS for India)",
-    "RELIANCE.NS"
-)
+symbol = st.text_input("Enter Stock Symbol (.NS for India)", "RELIANCE.NS")
 
 if not symbol:
     st.stop()
@@ -92,21 +84,18 @@ price = price_data["Close"].iloc[-1]
 returns = price_data["Close"].pct_change().dropna()
 volatility = returns.std() * 100
 
-# Moving averages
 ma50 = price_data["Close"].rolling(50).mean()
 ma200 = price_data["Close"].rolling(200).mean()
 
-# Drawdown
 cum_max = price_data["Close"].cummax()
 drawdown = (price_data["Close"] - cum_max) / cum_max * 100
+max_dd = drawdown.min()
 
-# CAGR
 years = len(price_data) / 252
 cagr = (price_data["Close"].iloc[-1] / price_data["Close"].iloc[0]) ** (1/years) - 1
 
-# ROE & ROCE (computed manually)
+# ================== ROE & ROCE (DERIVED) ==================
 roe = roce = None
-
 try:
     net_income = financials.loc["Net Income"][0]
     equity = balance.loc["Total Stockholder Equity"][0]
@@ -127,123 +116,208 @@ except:
 if section == "Market Overview":
     st.subheader("📌 Market Overview")
 
-    col1, col2, col3 = st.columns(3)
-    col1.metric("Current Price", f"{currency}{price:.2f}")
-    col2.metric("Annualized Return", f"{cagr*100:.2f}%")
-    col3.metric("Volatility", f"{volatility:.2f}%")
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Current Price", f"{currency}{price:.2f}")
+    c2.metric("Annualized Return (3Y)", f"{cagr*100:.2f}%")
+    c3.metric("Volatility", f"{volatility:.2f}%")
 
     st.line_chart(price_data["Close"])
 
     st.markdown("""
-**How to read this:**  
-• Higher volatility = more emotional swings  
-• CAGR shows long-term compounding ability  
-• Price trend gives market confidence signal
-""")
-
-# ================== BUY / SELL DECISION ==================
-elif section == "Buy / Sell Decision":
-    st.subheader("📌 Buy / Sell / Wait Decision")
-
-    st.line_chart(pd.DataFrame({
-        "Price": price_data["Close"],
-        "50 DMA": ma50,
-        "200 DMA": ma200
-    }))
-
-    if price > ma50.iloc[-1] > ma200.iloc[-1]:
-        st.success(f"""
-**Trend:** Strong  
-**Strategy:** Buy only on dips near {currency}{ma50.iloc[-1]:.2f}  
-**Exit if:** Price breaks below {currency}{ma200.iloc[-1]:.2f}
-""")
-    elif price < ma200.iloc[-1]:
-        st.error("""
-**Trend:** Weak  
-**Strategy:** Avoid or exit  
-**Reason:** Long-term structure broken
-""")
-    else:
-        st.warning("""
-**Trend:** Neutral  
-**Strategy:** Wait for clarity  
+**Conclusion**
+- CAGR shows long-term wealth creation ability.
+- Volatility indicates emotional difficulty.
+- Price trend reflects market confidence.
 """)
 
 # ================== DEEP ANALYSIS ==================
 elif section == "Deep Analysis":
-    st.subheader("📊 Risk & Behavioural Analysis")
+    st.subheader("🔍 Deep Analysis — Price, Risk & Business Reality")
 
-    st.markdown("### Drawdown Analysis")
-    st.line_chart(drawdown)
+    # BUY / SELL ZONES
+    st.markdown("### 📈 Buy & Sell Zones (Rule-Based)")
+
+    support = price_data["Close"].rolling(20).min().iloc[-1]
+    resistance = price_data["Close"].rolling(20).max().iloc[-1]
+
+    df = price_data[["Close"]].copy()
+    df["Support (Buy Zone)"] = support
+    df["Resistance (Sell Zone)"] = resistance
+
+    st.line_chart(df)
 
     st.markdown("""
-This chart shows **worst historical pain** from peaks.
-It answers: *Can you hold this stock during crashes?*
+**Inference**
+- Buy near support improves risk–reward.
+- Avoid fresh buying near resistance.
+- Stops are mandatory below support.
 """)
 
-    st.markdown("### Return Distribution")
-    st.bar_chart(returns * 100)
+    # VOLATILITY
+    st.markdown("### ⚠️ Volatility & Risk")
+
+    risk_level = "Low" if volatility < 1.5 else "Medium" if volatility < 2.5 else "High"
+    st.metric("Volatility Level", f"{volatility:.2f}%", risk_level)
+
+    st.markdown("""
+**Inference**
+- High volatility = higher emotional pressure.
+- Suitable investors depend on this number.
+""")
+
+    # DRAWDOWN
+    st.markdown("### 📉 Worst Historical Loss")
+
+    st.line_chart(drawdown)
+
+    st.markdown(f"""
+**Inference**
+- Maximum drawdown: **{max_dd:.2f}%**
+- This is the worst pain investors faced.
+- Ask yourself: *Can I hold during this?*
+""")
+
+    # FINANCIAL PERFORMANCE
+    st.markdown("### 💰 Business Performance (YoY)")
+
+    if not financials.empty:
+        try:
+            perf = pd.DataFrame({
+                "Revenue": financials.loc["Total Revenue"].iloc[:2],
+                "Net Profit": financials.loc["Net Income"].iloc[:2]
+            }).T
+            st.bar_chart(perf)
+
+            st.markdown("""
+**Inference**
+- Revenue growth = business expansion.
+- Profit growth > revenue = efficiency.
+""")
+        except:
+            st.warning("Detailed financial data unavailable.")
+
+    # CASH FLOW
+    st.markdown("### 💵 Cash Flow Quality")
+
+    cfo = None
+    for key in ["Total Cash From Operating Activities", "Operating Cash Flow"]:
+        if not cashflow.empty and key in cashflow.index:
+            cfo = cashflow.loc[key]
+            break
+
+    if cfo is not None:
+        st.line_chart(cfo)
+        st.markdown("""
+**Inference**
+- Consistent positive cash flow confirms earnings quality.
+- Profit without cash is a red flag.
+""")
+    else:
+        st.warning("Cash flow data not consistently available.")
+
+    # FINAL SUMMARY
+    st.markdown("## 🧠 FINAL ANALYST VERDICT")
+
+    st.markdown("""
+**Long-Term Investors**
+- Enter near support with patience.
+- Ignore short-term noise.
+- Suitable if you can tolerate drawdowns.
+
+**Short-Term Traders**
+- Buy only near support.
+- Exit near resistance.
+- Strict stop-loss required.
+
+**Intraday Traders**
+- Not ideal unless volatility expands.
+
+**Bottom Line**
+This stock rewards **discipline and patience**, not predictions.
+""")
 
 # ================== FUNDAMENTALS ==================
 elif section == "Fundamentals Decoder":
     st.subheader("📘 Fundamentals Decoder")
 
-    data = {
-        "Market Cap": info.get("marketCap"),
-        "P/E Ratio": info.get("trailingPE"),
-        "Debt to Equity": info.get("debtToEquity"),
-        "ROE": roe,
-        "ROCE": roce,
-        "Profit Margin": info.get("profitMargins"),
-        "Dividend Yield": info.get("dividendYield"),
-    }
+    df = pd.DataFrame({
+        "Metric": ["ROE", "ROCE", "Debt to Equity", "Profit Margin", "Dividend Yield"],
+        "Value": [
+            f"{roe*100:.2f}%" if roe else "Data unavailable",
+            f"{roce*100:.2f}%" if roce else "Data unavailable",
+            info.get("debtToEquity"),
+            info.get("profitMargins"),
+            info.get("dividendYield")
+        ]
+    })
 
-    df = pd.DataFrame.from_dict(data, orient="index", columns=["Value"])
     st.table(df)
 
-    if roe and roe > 0.15:
-        st.success("Strong capital efficiency.")
-    else:
-        st.warning("Capital efficiency is average or weak.")
+    st.markdown("""
+**Conclusion**
+- ROE & ROCE show capital efficiency.
+- Debt levels define risk.
+- Margins show business strength.
+""")
 
 # ================== FINANCIAL HEALTH ==================
 elif section == "Financial Health (Beginner)":
     st.subheader("🩺 Financial Health — Simple Language")
 
-    if not cashflow.empty:
-        cfo = cashflow.loc["Total Cash From Operating Activities"]
-        st.line_chart(cfo)
-
-        if cfo.mean() > 0:
-            st.success("Company generates real operating cash.")
-        else:
-            st.error("Cash generation is weak.")
+    if roe and roe > 0.15 and cfo is not None:
+        st.success("Financially strong business.")
     else:
-        st.warning("Cash flow data unavailable.")
+        st.warning("Financial strength is average or inconsistent.")
 
     st.markdown("""
-**Beginner Verdict:**  
-Strong businesses generate cash consistently.
+**Beginner Takeaway**
+- Strong companies generate cash.
+- Debt must be manageable.
+- Ignore hype, follow numbers.
 """)
 
-# ================== PORTFOLIO RISK ==================
-elif section == "Portfolio Risk Checker":
-    st.subheader("⚠️ Portfolio Risk Checker")
+# ================== BUY / SELL ==================
+elif section == "Buy / Sell Decision":
+    st.subheader("🎯 Buy / Sell Decision")
 
-    amount = st.number_input("Investment Amount (₹)", 50000)
-    stocks = st.slider("Number of stocks in portfolio", 1, 20, 5)
-    risk = st.selectbox("Risk Profile", ["Low", "Medium", "High"])
-
-    if stocks < 5:
-        st.error("High concentration risk.")
+    if price > ma50.iloc[-1] > ma200.iloc[-1]:
+        st.success("Trend is strong. Buy on dips near support.")
+    elif price < ma200.iloc[-1]:
+        st.error("Trend is weak. Avoid or exit.")
     else:
-        st.success("Diversification acceptable.")
+        st.warning("Trend is sideways. Wait for clarity.")
 
-    if volatility > 2.5 and risk == "Low":
-        st.error("Stock volatility mismatches your risk profile.")
+# ================== NEWS ==================
+elif section == "News & Sentiment Analysis":
+    st.subheader("📰 News & Sentiment Impact")
+
+    news = stock.news[:10]
+
+    if not news:
+        st.info("No major recent news.")
     else:
-        st.success("Risk alignment reasonable.")
+        for n in news:
+            title = n.get("title", "")
+            link = n.get("link") or n.get("url")
+            source = n.get("publisher", "Unknown")
+
+            if link:
+                st.markdown(f"**[{title}]({link})**")
+            else:
+                st.markdown(f"**{title}**")
+
+            st.caption(f"Source: {source}")
+
+            t = title.lower()
+            if any(w in t for w in ["profit", "growth", "order", "expansion"]):
+                st.success("Positive Impact")
+            elif any(w in t for w in ["loss", "risk", "decline"]):
+                st.error("Negative Impact")
+            else:
+                st.info("Neutral Impact")
+
+            st.markdown("---")
 
 # ================== FOOTER ==================
 st.markdown("---")
-st.caption("Alpha Stack • Built for decision-making, not speculation • Made by Kriya")
+st.caption("ALPHA STACK • Decision Intelligence System • Built by Kriya")
