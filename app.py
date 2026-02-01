@@ -44,10 +44,10 @@ def load_data(symbol):
     hist = t.history(period="5y")
     info = t.info
     return hist, info  
+    
+price_data, info = load_data(symbol)
+stock = yf.Ticker(symbol)
 
-
-
-price_data, info, stock = load_data(symbol)
 
 if price_data.empty:
     st.error("No data available.")
