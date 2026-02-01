@@ -43,7 +43,8 @@ def load_data(symbol):
     t = yf.Ticker(symbol)
     hist = t.history(period="5y")
     info = t.info
-    return hist, info, t
+    return hist, info
+
 
 price_data, info, stock = load_data(symbol)
 
