@@ -2,213 +2,255 @@ import streamlit as st
 import yfinance as yf
 import pandas as pd
 import numpy as np
-import plotly.graph_objects as go
 
 st.set_page_config(page_title="ALPHA STACK", layout="wide")
 
-# -----------------------------
-# DATA LOADER (SAFE)
-# -----------------------------
-@st.cache_data
-def load_price(symbol):
-    df = yf.download(symbol, period="5y", progress=False)
-    return df
+# =====================================================
+# HEADER
+# =====================================================
+st.markdown("""
+<h1>🟢 ALPHA STACK</h1>
+<p style="color:gray;">Market Intelligence • Built for decisions, not predictions</p>
+<marquee>Risk management > return chasing • Made by Kriya</marquee>
+<hr>
+""", unsafe_allow_html=True)
 
-def get_ticker(symbol):
-    return yf.Ticker(symbol)
-
-# -----------------------------
+# =====================================================
 # SIDEBAR
-# -----------------------------
-st.sidebar.title("ALPHA STACK")
-page = st.sidebar.radio(
-    "Navigation",
+# =====================================================
+st.sidebar.title("Navigation")
+section = st.sidebar.radio(
+    "",
     [
         "Buy / Sell Decision",
-        "Deep Analysis",
+        "Fundamentals Decoder",
+        "Financial Health (Beginner)",
         "Business Performance",
+        "Portfolio Simulation",
         "Portfolio Allocation",
         "Monte Carlo Simulation",
-        "News & Sentiment"
+        "News & Sentiment",
     ]
 )
 
 symbol = st.sidebar.text_input("Stock Symbol (.NS for India)", "RELIANCE.NS")
 
-price = load_price(symbol)
-ticker = get_ticker(symbol)
+# =====================================================
+# DATA LOADING (SAFE)
+# =====================================================
+@st.cache_data
+def load_data(symbol):
+    t = yf.Ticker(symbol)
+    hist = t.history(period="5y")
+    info = t.info
+    return hist, info, t
 
-# -----------------------------
+price_data, info, stock = load_data(symbol)
+
+if price_data.empty:
+    st.error("No data available.")
+    st.stop()
+
+price = price_data["Close"].iloc[-1]
+currency = "₹" if symbol.endswith(".NS") else "$"
+
+returns = price_data["Close"].pct_change().dropna()
+volatility = returns.std() * 100
+
+ma50 = price_data["Close"].rolling(50).mean()
+ma200 = price_data["Close"].rolling(200).mean()
+
+# =====================================================
 # BUY / SELL DECISION
-# -----------------------------
-if page == "Buy / Sell Decision":
+# =====================================================
+if section == "Buy / Sell Decision":
     st.header("📌 Buy / Sell Decision")
 
-    close = price["Close"]
-    current_price = close.iloc[-1]
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Current Price", f"{currency}{price:,.0f}")
+    c2.metric("50 DMA", f"{currency}{ma50.iloc[-1]:,.0f}")
+    c3.metric("200 DMA", f"{currency}{ma200.iloc[-1]:,.0f}")
 
-    support = close.rolling(200).min().iloc[-1]
-    resistance = close.rolling(200).max().iloc[-1]
+    st.line_chart(price_data["Close"])
 
-    st.metric("Current Price", f"₹{current_price:,.2f}")
-    st.metric("Strong Buy Zone", f"₹{support:,.0f}")
-    st.metric("Sell / Profit Zone", f"₹{resistance:,.0f}")
+    recent = price_data["Close"].tail(120)
+    support = recent.min()
+    resistance = recent.max()
 
-    st.markdown("""
-### Interpretation
-• If price is **near support**, risk is low → **Accumulation zone**  
-• If price is **near resistance**, upside is limited → **Book profits**  
-• If price is mid-range → **Wait, don’t chase**
+    st.markdown(f"""
+### 🎯 Buy / Sell Zones
+• **Buy near:** {currency}{support:,.0f}  
+• **Sell near:** {currency}{resistance:,.0f}
+
+**Interpretation**
+1. Buying near support reduces downside risk  
+2. Selling near resistance avoids greed traps  
+3. Best suited for swing & positional investors  
 """)
 
-# -----------------------------
-# DEEP ANALYSIS
-# -----------------------------
-elif page == "Deep Analysis":
-    st.header("📊 Deep Analysis")
+# =====================================================
+# FUNDAMENTALS
+# =====================================================
+elif section == "Fundamentals Decoder":
+    st.header("📘 Fundamentals Decoder")
 
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(x=price.index, y=price["Close"], name="Price"))
-    fig.add_hline(y=price["Close"].rolling(200).mean().iloc[-1], line_dash="dash", name="200 DMA")
-    st.plotly_chart(fig, use_container_width=True)
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Market Cap (Cr)", f"{info.get('marketCap',0)/1e7:.0f}")
+    c1.metric("P/E", info.get("trailingPE"))
+    c2.metric("Debt / Equity", info.get("debtToEquity"))
+    c2.metric("ROE", info.get("returnOnEquity"))
+    c3.metric("52W High", info.get("fiftyTwoWeekHigh"))
+    c3.metric("52W Low", info.get("fiftyTwoWeekLow"))
 
     st.markdown("""
-### What this chart tells you
-• Trend direction using **200-DMA**  
-• Buying near DMA reduces downside risk  
-• Strong trends stay above DMA  
-• Below DMA = caution zone  
-• Best for **positional & long-term investors**
+### 🧠 How to read this
+• High ROE = efficient business  
+• High debt = risky in downturns  
+• Very high P/E = expectations already priced in  
 """)
 
-# -----------------------------
-# BUSINESS PERFORMANCE
-# -----------------------------
-elif page == "Business Performance":
+# =====================================================
+# FINANCIAL HEALTH
+# =====================================================
+elif section == "Financial Health (Beginner)":
+    st.header("💊 Financial Health")
+
+    cf = stock.cashflow
+    if cf.empty:
+        st.warning("Cash flow data unavailable.")
+    else:
+        cfo = cf.iloc[0].sum()
+        st.success("Positive operating cash flow") if cfo > 0 else st.error("Weak cash flow")
+
+    st.markdown("""
+• Cash flow is oxygen for companies  
+• Profits without cash = danger  
+• Debt + weak cash = red flag  
+""")
+
+# =====================================================
+# BUSINESS PERFORMANCE (MATCHES YOUR SKETCH)
+# =====================================================
+elif section == "Business Performance":
     st.header("🏭 Business Performance (YoY)")
 
-    try:
-        fin = ticker.financials
-        rev = fin.loc["Total Revenue"]
-        prof = fin.loc["Net Income"]
+    fin = stock.financials
+    if fin.empty:
+        st.warning("Data unavailable.")
+        st.stop()
 
-        df = pd.DataFrame({
-            "Revenue": rev,
-            "Net Profit": prof
-        }).dropna().T
+    data = pd.DataFrame({
+        "Revenue": fin.loc["Total Revenue"].head(2).values,
+        "Net Profit": fin.loc["Net Income"].head(2).values
+    }, index=["Previous Year", "Latest Year"])
 
-        fig = go.Figure()
-        for col in df.columns:
-            fig.add_bar(name=col, x=df.index, y=df[col])
+    st.bar_chart(data)
 
-        st.plotly_chart(fig, use_container_width=True)
-
-        st.markdown("""
-### Interpretation
-• Revenue growth = business demand  
-• Profit growth = pricing power  
-• Profit < Revenue growth = margin pressure  
-• Consistent bars = stable company  
-• Volatile profits = cyclical risk
+    st.markdown("""
+### 🧠 Interpretation
+1. Revenue growth shows demand strength  
+2. Profit growth shows cost control  
+3. Revenue ↑ but profit ↓ = margin pressure  
+4. Healthy companies grow both together  
 """)
-    except:
-        st.warning("Business financials not fully available.")
 
-# -----------------------------
+# =====================================================
+# PORTFOLIO SIMULATION
+# =====================================================
+elif section == "Portfolio Simulation":
+    st.header("📈 Portfolio Simulation")
+
+    amount = st.number_input("Investment Amount (₹)", 10000, value=100000)
+    years = st.slider("Years", 1, 10, 3)
+
+    data = price_data.tail(years * 252)
+    units = amount / data["Close"].iloc[0]
+    portfolio = units * data["Close"]
+
+    st.line_chart(portfolio)
+
+    st.markdown("""
+### 🧠 What this tells you
+• Shows wealth growth over time  
+• Highlights drawdowns emotionally investors panic at  
+• Helps decide position sizing  
+""")
+
+# =====================================================
 # PORTFOLIO ALLOCATION
-# -----------------------------
-elif page == "Portfolio Allocation":
-    st.header("📦 Portfolio Allocation")
+# =====================================================
+elif section == "Portfolio Allocation":
+    st.header("🧩 Portfolio Allocation")
 
-    weights = {
-        "Large Cap": 50,
-        "Mid Cap": 30,
-        "Cash": 20
-    }
+    syms = ["RELIANCE.NS", "TCS.NS", "HDFCBANK.NS"]
+    data = yf.download(syms, period="5y")["Close"]
 
-    fig = go.Figure(data=[go.Pie(labels=list(weights.keys()), values=list(weights.values()))])
-    st.plotly_chart(fig, use_container_width=True)
+    rets = data.pct_change().dropna()
+    weights = np.array([1/len(syms)] * len(syms))
+    port = (1 + rets.dot(weights)).cumprod()
+
+    st.line_chart(port)
 
     st.markdown("""
-### Allocation Logic
-• Large cap = stability  
-• Mid cap = growth engine  
-• Cash = downside protection  
-• Reduces emotional decision-making  
-• Ideal for **beginners & professionals**
+### 🧠 Interpretation
+1. Diversification smooths volatility  
+2. No single stock controls outcome  
+3. Reduces emotional decision-making  
 """)
 
-# -----------------------------
-# MONTE CARLO (SIMPLIFIED)
-# -----------------------------
-elif page == "Monte Carlo Simulation":
-    st.header("🔮 Monte Carlo Simulation (Simplified)")
+# =====================================================
+# MONTE CARLO (SIMPLIFIED & UNDERSTANDABLE)
+# =====================================================
+elif section == "Monte Carlo Simulation":
+    st.header("🔮 Monte Carlo Simulation")
 
-    returns = price["Close"].pct_change().dropna()
-    mu, sigma = returns.mean(), returns.std()
-    last_price = price["Close"].iloc[-1]
+    log_ret = np.log(price_data["Close"] / price_data["Close"].shift(1)).dropna()
+    mu, sigma = log_ret.mean(), log_ret.std()
 
-    simulations = []
-    for i in range(10):  # ONLY 10 LINES
-        prices = [last_price]
+    paths = []
+    for _ in range(10):  # MAX 10 lines only
+        prices = [price]
         for _ in range(252 * 3):
-            prices.append(prices[-1] * np.exp(np.random.normal(mu, sigma)))
-        simulations.append(prices)
+            prices.append(prices[-1] * np.exp(mu + sigma * np.random.randn()))
+        paths.append(prices)
 
-    fig = go.Figure()
-    for i, sim in enumerate(simulations):
-        fig.add_trace(go.Scatter(y=sim, mode="lines", name=f"Path {i+1}"))
-
-    st.plotly_chart(fig, use_container_width=True)
+    st.line_chart(pd.DataFrame(paths).T)
 
     st.markdown("""
-### How to read this
+### 🧠 How to understand this
 • Each line = one possible future  
-• Upper paths = optimistic outcome  
-• Lower paths = worst-case risk  
-• Middle cluster = most likely range  
-• Helps decide **risk tolerance**
+• Wider spread = higher risk  
+• Focus on downside comfort, not upside fantasy  
+
+**Investor takeaway**
+If worst paths scare you → position too big  
 """)
 
-    st.markdown("""
-### Final Insight
-• Long-term investors focus on **median path**  
-• Traders focus on **downside risk**  
-• If worst-case scares you → reduce position size
-""")
-
-# -----------------------------
+# =====================================================
 # NEWS & SENTIMENT
-# -----------------------------
-elif page == "News & Sentiment":
-    st.header("📰 News & Sentiment Impact")
+# =====================================================
+elif section == "News & Sentiment":
+    st.header("📰 News & Sentiment")
 
-    news = ticker.news[:5]
+    news = stock.news
+    if not news:
+        st.warning("No recent news.")
+    else:
+        for n in news[:5]:
+            title = n.get("title", "")
+            link = n.get("link", "")
+            st.markdown(f"### 🔗 [{title}]({link})")
 
-    for n in news:
-        title = n.get("title", "News")
-        link = n.get("link", "")
-        sentiment = "Neutral"
+            t = title.lower()
+            if any(w in t for w in ["profit", "growth", "expansion"]):
+                st.success("Impact: Positive")
+            elif any(w in t for w in ["loss", "decline", "debt"]):
+                st.error("Impact: Negative")
+            else:
+                st.info("Impact: Neutral")
 
-        if "profit" in title.lower() or "growth" in title.lower():
-            sentiment = "Positive"
-        elif "loss" in title.lower() or "debt" in title.lower():
-            sentiment = "Negative"
-
-        st.markdown(f"### [{title}]({link})")
-        st.markdown(f"**Impact:** {sentiment}")
-        st.divider()
-
-    st.markdown("""
-### How to use news
-• Positive news = short-term momentum  
-• Negative news = volatility spike  
-• Neutral news = ignore noise  
-• Price reaction matters more than headline
-""")
-
-# -----------------------------
+# =====================================================
 # FOOTER
-# -----------------------------
-st.divider()
-st.markdown("**ALPHA STACK** — Data → Conviction | Made by Kriya")
+# =====================================================
+st.markdown("---")
+st.caption("ALPHA STACK • Decision Intelligence System • Built by Kriya")
