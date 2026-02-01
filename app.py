@@ -3,10 +3,11 @@ import yfinance as yf
 import pandas as pd
 import numpy as np
 
-# ================= PAGE CONFIG =================
 st.set_page_config(page_title="ALPHA STACK", layout="wide")
 
-# ================= HEADER =================
+# =====================================================
+# HEADER
+# =====================================================
 st.markdown("""
 <h1>🟢 ALPHA STACK</h1>
 <p style="color:gray;">Market Intelligence • Built for decisions, not predictions</p>
@@ -14,7 +15,9 @@ st.markdown("""
 <hr>
 """, unsafe_allow_html=True)
 
-# ================= SIDEBAR =================
+# =====================================================
+# SIDEBAR
+# =====================================================
 st.sidebar.title("Navigation")
 section = st.sidebar.radio(
     "",
@@ -22,44 +25,46 @@ section = st.sidebar.radio(
         "Buy / Sell Decision",
         "Fundamentals Decoder",
         "Financial Health (Beginner)",
+        "Business Performance",
         "Portfolio Simulation",
         "Portfolio Allocation",
         "Monte Carlo Simulation",
+        "News & Sentiment",
     ]
 )
 
 symbol = st.sidebar.text_input("Stock Symbol (.NS for India)", "RELIANCE.NS")
 
-# ================= DATA LOADING (SAFE) =================
+# =====================================================
+# DATA LOADING (SAFE)
+# =====================================================
 @st.cache_data
 def load_data(symbol):
-    ticker = yf.Ticker(symbol)
-    hist = ticker.history(period="5y")
-    info = ticker.info
+    t = yf.Ticker(symbol)
+    hist = t.history(period="5y")
+    info = t.info
     return hist, info
 
 price_data, info = load_data(symbol)
-stock = yf.Ticker(symbol)  # NOT cached (important)
+stock = yf.Ticker(symbol)
 
 if price_data.empty:
-    st.error("No data available for this symbol.")
+    st.error("No price data available.")
     st.stop()
 
 price = price_data["Close"].iloc[-1]
 currency = "₹" if symbol.endswith(".NS") else "$"
 
-# ================= COMMON METRICS =================
 returns = price_data["Close"].pct_change().dropna()
 volatility = returns.std() * 100
+drawdown = (price_data["Close"] / price_data["Close"].cummax() - 1) * 100
+max_dd = drawdown.min()
 
 ma50 = price_data["Close"].rolling(50).mean()
 ma200 = price_data["Close"].rolling(200).mean()
 
-drawdown = (price_data["Close"] / price_data["Close"].cummax() - 1) * 100
-max_dd = drawdown.min()
-
 # =====================================================
-# BUY / SELL DECISION
+# BUY / SELL DECISION + BUY/SELL ZONES
 # =====================================================
 if section == "Buy / Sell Decision":
     st.header("📌 Buy / Sell Decision")
@@ -72,26 +77,39 @@ if section == "Buy / Sell Decision":
     st.line_chart(price_data["Close"])
 
     if price > ma50.iloc[-1] > ma200.iloc[-1]:
-        st.success("""
-**Trend: Strong Uptrend**
-
-• Long-term investors: Buy on dips  
-• Short-term traders: Buy near 50 DMA  
-• Exit if price breaks below 200 DMA  
-""")
+        st.success("Trend: Strong Uptrend (Long-term positive)")
     elif price < ma200.iloc[-1]:
-        st.error("""
-**Trend: Weak**
-
-• Avoid fresh buying  
-• Existing investors should protect capital  
-""")
+        st.error("Trend: Weak / Downtrend (Avoid fresh buying)")
     else:
-        st.warning("""
-**Trend: Sideways**
+        st.warning("Trend: Sideways (Wait for clarity)")
 
-• Wait for clarity  
-• Risk–reward not attractive right now  
+    # ---------- BUY / SELL ZONES ----------
+    st.markdown("## 🎯 Buy & Sell Zones (Rule-Based)")
+
+    recent = price_data["Close"].tail(120)
+    support = recent.min()
+    resistance = recent.max()
+
+    buy_low, buy_high = support * 0.98, support * 1.02
+    sell_low, sell_high = resistance * 0.98, resistance * 1.02
+
+    st.line_chart(recent)
+
+    z1, z2, z3 = st.columns(3)
+    z1.metric("Buy Zone", f"{currency}{buy_low:,.0f} – {currency}{buy_high:,.0f}")
+    z2.metric("Current Price", f"{currency}{price:,.0f}")
+    z3.metric("Sell Zone", f"{currency}{sell_low:,.0f} – {currency}{sell_high:,.0f}")
+
+    st.markdown(f"""
+### 🧠 Interpretation
+• Buy zone is derived from **historical demand (support)**  
+• Sell zone comes from **historical supply (resistance)**  
+
+**How to act**
+1. Accumulate near **{currency}{buy_low:,.0f}–{currency}{buy_high:,.0f}**
+2. Book partial profits near **{currency}{sell_low:,.0f}–{currency}{sell_high:,.0f}**
+3. If price breaks below support → **trend weakens**
+4. Best for **swing & positional investors**
 """)
 
 # =====================================================
@@ -100,68 +118,98 @@ if section == "Buy / Sell Decision":
 elif section == "Fundamentals Decoder":
     st.header("📘 Fundamentals Decoder")
 
-    def show(label, value):
-        st.metric(label, value if value else "—")
+    def metric(label, val):
+        st.metric(label, val if val not in [None, ""] else "—")
 
     c1, c2, c3 = st.columns(3)
-
     with c1:
-        show("Market Cap (Cr)", f"{info.get('marketCap',0)/1e7:.0f}")
-        show("P/E Ratio", info.get("trailingPE"))
-        show("Book Value", info.get("bookValue"))
+        metric("Market Cap (Cr)", f"{info.get('marketCap',0)/1e7:.0f}")
+        metric("P/E", info.get("trailingPE"))
+        metric("Book Value", info.get("bookValue"))
 
     with c2:
-        show("Debt to Equity", info.get("debtToEquity"))
-        show("Profit Margin", info.get("profitMargins"))
-        show("Dividend Yield", info.get("dividendYield"))
+        metric("Debt / Equity", info.get("debtToEquity"))
+        metric("Profit Margin", info.get("profitMargins"))
+        metric("ROE", info.get("returnOnEquity"))
 
     with c3:
-        show("52W High", info.get("fiftyTwoWeekHigh"))
-        show("52W Low", info.get("fiftyTwoWeekLow"))
-        show("Industry", info.get("industry"))
+        metric("52W High", info.get("fiftyTwoWeekHigh"))
+        metric("52W Low", info.get("fiftyTwoWeekLow"))
+        metric("Industry", info.get("industry"))
 
     st.markdown("""
-### Interpretation
-• Lower debt = safer during downturns  
-• High margins = pricing power  
-• Very high P/E = future growth already priced in  
+### 🧠 What this means
+• High debt = risk in downturns  
+• High ROE = efficient capital usage  
+• Very high P/E = growth already priced in  
 """)
 
 # =====================================================
-# FINANCIAL HEALTH (BEGINNER)
+# FINANCIAL HEALTH
 # =====================================================
 elif section == "Financial Health (Beginner)":
-    st.header("💊 Financial Health (Simple Language)")
+    st.header("💊 Financial Health (Beginner)")
 
     try:
-        cashflow = stock.cashflow
+        cf = stock.cashflow
     except:
-        cashflow = pd.DataFrame()
+        cf = pd.DataFrame()
 
-    if cashflow.empty:
-        st.warning("Cash flow data not available.")
+    if cf.empty:
+        st.warning("Cash-flow data unavailable.")
     else:
-        cfo = cashflow.iloc[0].sum()
+        cfo = cf.iloc[0].sum()
         if cfo > 0:
-            st.success("✅ Company generates positive operating cash.")
+            st.success("Company generates positive operating cash.")
         else:
-            st.error("❌ Company struggles to generate cash.")
+            st.error("Company struggles to generate cash.")
 
     st.markdown("""
-### Beginner Verdict
-• Cash generation keeps companies alive  
-• Profit without cash is risky  
-• Debt + weak cash flow = danger  
+• Cash flow keeps businesses alive  
+• Profit without cash is dangerous  
+• Debt + weak cash flow = red flag  
 """)
 
 # =====================================================
-# PORTFOLIO SIMULATION (SINGLE STOCK)
+# BUSINESS PERFORMANCE
+# =====================================================
+elif section == "Business Performance":
+    st.header("🏭 Business Performance (YoY)")
+
+    try:
+        fin = stock.financials
+    except:
+        fin = pd.DataFrame()
+
+    if fin.empty:
+        st.warning("Financial statement data unavailable.")
+        st.stop()
+
+    revenue = fin.loc["Total Revenue"].head(2)
+    profit = fin.loc["Net Income"].head(2)
+
+    df = pd.DataFrame(
+        {"Revenue": revenue.values, "Net Profit": profit.values},
+        index=["Previous Year", "Latest Year"]
+    )
+
+    st.bar_chart(df)
+
+    st.markdown("""
+### 🧠 Interpretation
+• Revenue ↑ = demand & scale  
+• Profit ↑ = efficiency & pricing power  
+• Revenue ↑ but profit ↓ = cost pressure  
+""")
+
+# =====================================================
+# PORTFOLIO SIMULATION
 # =====================================================
 elif section == "Portfolio Simulation":
     st.header("📈 Portfolio Simulation")
 
     amount = st.number_input("Investment Amount (₹)", 10000, value=100000, step=10000)
-    years = st.slider("Investment Duration (Years)", 1, 10, 3)
+    years = st.slider("Years", 1, 10, 3)
 
     data = price_data.tail(years * 252)
     units = amount / data["Close"].iloc[0]
@@ -177,59 +225,49 @@ elif section == "Portfolio Simulation":
     c2.metric("CAGR", f"{cagr:.2f}%")
     c3.metric("Max Drawdown", f"{dd:.2f}%")
 
-    st.markdown("""
-**Interpretation**
-• Can you tolerate this drawdown emotionally?  
-• Returns are useless if risk is unbearable  
-""")
-
 # =====================================================
-# MULTI-STOCK PORTFOLIO ALLOCATION
+# PORTFOLIO ALLOCATION (BUG-SAFE)
 # =====================================================
 elif section == "Portfolio Allocation":
     st.header("🧩 Portfolio Allocation")
 
-    symbols = st.text_input(
+    syms = st.text_input(
         "Enter symbols (comma separated)",
         "RELIANCE.NS, TCS.NS, HDFCBANK.NS"
     )
+    tickers = [s.strip() for s in syms.split(",")]
 
-    tickers = [s.strip() for s in symbols.split(",")]
-    data = yf.download(tickers, period="5y")["Adj Close"]
+    raw = yf.download(tickers, period="5y", group_by="ticker")
+    prices = {}
 
-    if data.isnull().all().any():
-        st.error("One or more symbols have insufficient data.")
+    for t in tickers:
+        try:
+            if isinstance(raw.columns, pd.MultiIndex):
+                prices[t] = raw[t]["Close"]
+            else:
+                prices[t] = raw["Close"]
+        except:
+            pass
+
+    data = pd.DataFrame(prices).dropna()
+    if data.empty:
+        st.error("Portfolio data unavailable.")
         st.stop()
 
-    returns = data.pct_change().dropna()
+    rets = data.pct_change().dropna()
     weights = np.array([1/len(tickers)] * len(tickers))
-    portfolio_returns = returns.dot(weights)
-    cumulative = (1 + portfolio_returns).cumprod()
+    port = (1 + rets.dot(weights)).cumprod()
 
-    vol = portfolio_returns.std() * 100
-    dd = (cumulative / cumulative.cummax() - 1).min() * 100
-
-    st.line_chart(cumulative)
-
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Volatility", f"{vol:.2f}%")
-    c2.metric("Max Drawdown", f"{dd:.2f}%")
-    c3.metric("Stocks", len(tickers))
-
-    st.markdown("""
-**Interpretation**
-• Diversification smooths returns  
-• Portfolio risk < individual stock risk  
-""")
+    st.line_chart(port)
 
 # =====================================================
-# MONTE CARLO SIMULATION
+# MONTE CARLO SIMULATION + EXPLANATION
 # =====================================================
 elif section == "Monte Carlo Simulation":
     st.header("🔮 Monte Carlo Simulation")
 
-    returns = np.log(price_data["Close"] / price_data["Close"].shift(1)).dropna()
-    mu, sigma = returns.mean(), returns.std()
+    log_ret = np.log(price_data["Close"] / price_data["Close"].shift(1)).dropna()
+    mu, sigma = log_ret.mean(), log_ret.std()
 
     years = st.slider("Years into future", 1, 10, 3)
     days = years * 252
@@ -243,21 +281,54 @@ elif section == "Monte Carlo Simulation":
 
     st.line_chart(paths[:, :50])
 
-    final_prices = paths[-1]
-    p10, p50, p90 = np.percentile(final_prices, [10, 50, 90])
+    final = paths[-1]
+    p10, p50, p90 = np.percentile(final, [10, 50, 90])
 
     c1, c2, c3 = st.columns(3)
-    c1.metric("Worst Case (10%)", f"₹{p10:,.0f}")
-    c2.metric("Most Likely", f"₹{p50:,.0f}")
-    c3.metric("Best Case (90%)", f"₹{p90:,.0f}")
+    c1.metric("Worst Case (10%)", f"{currency}{p10:,.0f}")
+    c2.metric("Most Likely", f"{currency}{p50:,.0f}")
+    c3.metric("Best Case (90%)", f"{currency}{p90:,.0f}")
 
-    st.markdown("""
-**Interpretation**
-• This is probability, not prediction  
-• If worst case scares you → reduce position size  
-• Long-term edge exists only if downside is survivable  
+    st.markdown(f"""
+### 🧠 How to read this
+• Lines = possible futures, not predictions  
+• Focus on **zones**, not individual paths  
+
+**Decision guide**
+1. Can you tolerate fall to **{currency}{p10:,.0f}**?
+2. If yes → long-term holding possible  
+3. If no → reduce position size  
 """)
 
-# ================= FOOTER =================
+# =====================================================
+# NEWS & SENTIMENT
+# =====================================================
+elif section == "News & Sentiment":
+    st.header("📰 News & Sentiment Impact")
+
+    try:
+        news = stock.news
+    except:
+        news = []
+
+    if not news:
+        st.warning("No recent news found.")
+    else:
+        for n in news[:5]:
+            title = n.get("title", "News")
+            link = n.get("link", "#")
+            st.markdown(f"### 🔗 [{title}]({link})")
+
+            text = title.lower()
+            if any(w in text for w in ["growth", "profit", "expansion", "deal"]):
+                st.success("Impact: Positive")
+            elif any(w in text for w in ["loss", "decline", "debt", "lawsuit"]):
+                st.error("Impact: Negative")
+            else:
+                st.info("Impact: Neutral")
+
+# =====================================================
+# FOOTER
+# =====================================================
 st.markdown("---")
 st.caption("ALPHA STACK • Decision Intelligence System • Built by Kriya")
