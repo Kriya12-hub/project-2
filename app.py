@@ -43,9 +43,8 @@ def load_data(symbol):
     t = yf.Ticker(symbol)
     hist = t.history(period="5y")
     info = t.info
-    return hist, info
-price_data, info = load_data(symbol)
-stock = yf.Ticker(symbol)   # ✅ NOT cached
+    return hist, info  
+
 
 
 price_data, info, stock = load_data(symbol)
